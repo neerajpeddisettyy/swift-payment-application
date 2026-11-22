@@ -1,0 +1,9 @@
+# Build outputs and installed dependencies
+target/
+node_modules/
+dist/
+# IDE metadata and local environment files
+.idea/
+.vscode/
+*.iml
+.env

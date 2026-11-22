@@ -1,0 +1,73 @@
+# ============================================================
+# Swift backend configuration (matches docker-compose.yml)
+# ============================================================
+server:
+  port: 8080
+
+spring:
+  application:
+    name: swift-backend
+
+  # --- PostgreSQL ---
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:15433/swift?options=-c%20TimeZone=UTC
+    username: swift
+    password: swift_pass
+    hikari:
+      maximum-pool-size: 30      # connections shared by all threads (also used by the 1,000-thread test)
+      connection-timeout: 60000
+
+  # --- JPA / Hibernate ---
+  jpa:
+    hibernate:
+      ddl-auto: update           # auto-creates/updates tables from entities (fine for a local demo)
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+    show-sql: false
+
+  # --- Redis ---
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 16380
+
+  # --- Kafka (events are JSON; the listener knows the target class) ---
+  kafka:
+    bootstrap-servers: 127.0.0.1:19094
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        spring.json.add.type.headers: false
+    consumer:
+      group-id: swift-notification-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.swift.*"
+        spring.json.value.default.type: com.swift.event.TransferCompletedEvent
+        spring.json.use.type.headers: false
+
+# --- Swagger / OpenAPI ---
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# --- Swift custom settings ---
+swift:
+  jwt:
+    # Base64-encoded secret key. Demo only - never commit a real secret.
+    secret: c3dpZnQtZ2xvYmFsLWxlZGdlci1kZW1vLXNlY3JldC1rZXktMjU2LWJpdHM=
+    expiration-ms: 86400000      # 24 hours
+  idempotency:
+    ttl-hours: 24
+  kafka:
+    notification-topic: swift-notifications

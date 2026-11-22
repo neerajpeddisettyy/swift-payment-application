@@ -1,0 +1,65 @@
+# ============================================================
+# Swift (Global Ledger) - Local infrastructure
+# Start:  docker compose up -d
+# Stop:   docker compose down        (add -v to wipe all data)
+# ============================================================
+services:
+
+  # 1) PostgreSQL 16 - the source of truth for users, wallets, transactions
+  swift_db:
+    image: postgres:16
+    container_name: swift_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: swift
+      POSTGRES_USER: swift
+      POSTGRES_PASSWORD: swift_pass
+    ports:
+      - "127.0.0.1:15433:5432"
+    volumes:
+      - swift_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swift -d swift"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 2) Redis 7 - stores idempotency keys (duplicate-payment protection)
+  swift_redis:
+    image: redis:7
+    container_name: swift_redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 3) Apache Kafka 3.7 in KRaft mode (no Zookeeper needed)
+  #    One single node acts as both broker and controller.
+  #    Uses host port 19094 to avoid local port conflicts.
+  swift_kafka:
+    image: apache/kafka:3.7.0
+    container_name: swift_kafka
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:19094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9094,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:19094
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+
+volumes:
+  swift_pgdata:
